@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import math
+from common import get_coords, plot_beam
 
 matplotlib.rc("contour", negative_linestyle="dashed")
 matplotlib.rc("axes", linewidth=0.5)
@@ -14,108 +15,63 @@ from matplotlib.ticker import MultipleLocator
 from matplotlib.patches import Ellipse
 
 # Read the number of channels
-hdu_list = fits.open("data.fits")
+hdu_list = fits.open("data/AKSco.12CO.display.image.fits")
 hdu = hdu_list[0]
 header = hdu.header
-nx = header["NAXIS1"]
-ny = header["NAXIS2"]
-nchan = header["NAXIS3"]
-
-assert nx % 2 == 0 and ny % 2 == 0 , "We don't have an even number of pixels, assumptions in the routine are violated."
-
-# Midpoints
-mx = nx/2
-my = ny/2
-
-# Phase center in decimal degrees
-RA = header["CRVAL1"]
-DEC = header["CRVAL2"]
-
-# from: http://tdc-www.harvard.edu/wcstools/wcstools.wcs.html
-# CRPIX1 and CRPIX2 are the pixel coordinates of the reference point to which
-# the projection and rotation refer, i.e, integers
-# Indexed from 1, I'm assuming
-# If the image is 256 x 256, CRPIX = 129, then it must be indexed from 1.
-
-# CRVAL1 and CRVAL2 give the center coordinate as right ascension or longitude
-# in decimal degrees.
-
-# CDELT1 and CDELT2 indicate the plate scale in degrees per pixel
-# This means that to get proper RA, DEC coordinates you would need to add a
-# cos(DEC) in there or use some WCS tools. But since we just care about offsets,
-# this should be fine
-
-
-xx = np.arange(header["NAXIS1"])
-yy = np.arange(header["NAXIS2"])
-
-# RA coordinates
-CDELT1 = header["CDELT1"]
-CRPIX1 = header["CRPIX1"] - 1. # Now indexed from 0
-
-# DEC coordinates
-CDELT2 = header["CDELT2"]
-CRPIX2 = header["CRPIX2"] - 1. # Now indexed from 0
-
-# Lay down relative coordinates spanning the image
-# Note that RAs actually goes in decreasing order because of sky convention
-dRAs = (np.arange(nx) - nx/2) * CDELT1
-dDECs = (np.arange(ny) - ny/2) * CDELT2
-
-# Truncation radius
-radius = 2/3600.
 
 # Because DEC increases, this means that we should be using imshow with origin="lower" set.
 
 # Determine the frequencies. Goes in increasing order.
-freq = header["CRVAL3"] + np.arange(header["NAXIS3"]) * header["CDELT3"]
-print(freq)
+# freq = header["CRVAL3"] + np.arange(header["NAXIS3"]) * header["CDELT3"]
+# print(freq)
+#
+# c_kms = 2.99792458e5 # [km s^-1]
+# f0 = 230.538e9 # [Hz]
+# # f0 = header["RESTFRQ"] # [Hz]
+#
+# # Convert all frequencies to velocity [km/s]
+# vs = c_kms * (f0 - freq)/f0
 
-c_kms = 2.99792458e5 # [km s^-1]
-f0 = 230.538e9 # [Hz]
-# f0 = header["RESTFRQ"] # [Hz]
-
-# Convert all frequencies to velocity [km/s]
-vs = c_kms * (f0 - freq)/f0
-
-# Subtract the systemic velocity (in this case subtract a negative)
-# vs -= -26.09
+vs = vels = (np.arange(header["NAXIS3"])*header["CDELT3"] + header["CRVAL3"]) * 1e-3 # [km/s]
 
 # Read the beam size and position angle from the header
-BMAJ = 3600. * header["BMAJ"] # [arcsec]
-BMIN = 3600. * header["BMIN"] # [arcsec]
-BPA =  header["BPA"] # degrees East of North
+# BMAJ = 3600. * header["BMAJ"] # [arcsec]
+# BMIN = 3600. * header["BMIN"] # [arcsec]
+# BPA =  header["BPA"] # degrees East of North
 
 # If the dataset is 82 channels big, trim 11 from either side to get 60 channels
 triml = 11
 trimr = 11
 
-data = hdu.data[0,triml:-trimr]
-model_hdu_list = fits.open("model.fits")
-model = model_hdu_list[0].data[0, triml:-trimr]
+data = hdu.data[0] #,triml:-trimr]
+model_hdu_list = fits.open("data/model.12CO.display.image.fits")
+model = model_hdu_list[0].data[0] # , triml:-trimr]
 model_hdu_list.close()
 
-resid_hdu_list = fits.open("resid.fits")
-resid = resid_hdu_list[0].data[0, triml:-trimr]
+resid_hdu_list = fits.open("data/resid.12CO.display.image.fits")
+resid = resid_hdu_list[0].data[0] #, triml:-trimr]
 resid_hdu_list.close()
 
-vs = vs[triml:-trimr]
+# vs = vs[triml:-trimr]
 
 # Reverse the channels so blueshifted channels appear first
-data = data[::-1]
-model = model[::-1]
-resid = resid[::-1]
-vs = vs[::-1]
+# data = data[::-1]
+# model = model[::-1]
+# resid = resid[::-1]
+# vs = vs[::-1]
 
 
 # Data is now (nchan, ny, nx)
 # Assuming BSCALE=1.0 and BZERO=0.0
 
-# Alternatively
-slice_RA = math.floor(math.fabs(radius/CDELT1))
-slice_DEC = math.floor(math.fabs(radius/CDELT2))
+radius = 2/3600.
+dict = get_coords(header, radius)
+RA = 3600 * dict["RA"]
+DEC = 3600 * dict["DEC"]
+decl, decr = dict["DEC_slice"]
+ral, rar = dict["RA_slice"]
 
-assert slice_RA < mx and slice_DEC < my, "Selected radius must be smaller than half size of image."
+ext = (RA[0], RA[-1], DEC[0], DEC[-1]) # [arcsec]
 
 # print(np.sum(ind_DEC))
 # print(np.sum(ind_RA))
@@ -125,14 +81,20 @@ assert slice_RA < mx and slice_DEC < my, "Selected radius must be smaller than h
 # so we have to do them separately
 # data = data[:, ind_DEC, :]
 # data = data[:, :, ind_RA]
-data = data[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
-model = model[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
-resid = resid[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
+# data = data[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
+# model = model[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
+# resid = resid[:, mx-slice_DEC:mx+slice_DEC, mx-slice_RA:mx+slice_RA]
 
-dRAs = 3600 * dRAs[mx-slice_RA:mx+slice_RA] # [arcsec]
-dDECs = 3600 * dDECs[mx-slice_DEC:mx+slice_DEC] # [arcsec]
+# Before truncation, try to measure an average RMS away from the emission.
+region=40
+print("RMS", np.std(data[:,0:region,0:region]))
+print("RMS", np.std(data[:,0:region,-region:-1]))
+print("RMS", np.std(data[:,-region:-1,-region:-1]))
+print("RMS", np.std(data[:,-region:-1,0:region]))
 
-ext = (dRAs[0], dRAs[-1], dDECs[0], dDECs[-1]) # [arcsec]
+data = data[:, decl:decr, ral:rar]
+model = model[:, decl:decr, ral:rar]
+resid = resid[:, decl:decr, ral:rar]
 
 # Determine vmin and vmax from all of the channels, all of the datasets, excluding the trimmed ones
 all_data = np.concatenate((data, model, resid))
@@ -145,7 +107,7 @@ vvmax = np.max(np.abs(all_data))
 norm = matplotlib.colors.Normalize(-vvmax, vvmax)
 
 # Calculate the list of three-sigma contours to feed to the contour routine
-rms   = 3 * 0.00425
+rms   = 3 * 0.00373
 
 levels = []
 # Add contours from rms to vmin, then reverse
@@ -184,7 +146,6 @@ dy = ax_size / fig_height
 
 fig = plt.figure(figsize=(fig_width, fig_height))
 
-#
 incl = 109.5 # deg
 PA = 141.4 # deg
 
@@ -224,7 +185,7 @@ def plot(data, panel):
 
             # Annotate the velocity
             ax.annotate("{:.1f}".format(vs[chan]), (0.1, 0.8), xycoords="axes fraction", size=5)
-            if row == 0 and col == 0 and panel == 0:
+            if row == 0 and col == 0:
                 ax.annotate(r"$\textrm{km s}^{-1}$", (0.15, 0.6), xycoords="axes fraction", size=5)
 
             # Set ticks for every arcsec
@@ -239,8 +200,9 @@ def plot(data, panel):
 
             # Plot the beam
             if row == (nrows - 1) and col == 0:
-                ax.add_artist(Ellipse(xy=(1, -1), width=BMIN, height=BMAJ, angle=BPA,
-                    facecolor="0.8", linewidth=0.2))
+                plot_beam(ax, header)
+                # ax.add_artist(Ellipse(xy=(1, -1), width=BMIN, height=BMAJ, angle=BPA,
+                    # facecolor="0.8", linewidth=0.2))
 
             if row == (nrows - 1) and col == 0 and panel==2:
                 # Actually create axis labels

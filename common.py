@@ -2,6 +2,8 @@ import math
 from astropy.io import fits
 import numpy as np
 import math
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 
 def get_coords(header, radius):
     '''
@@ -67,3 +69,35 @@ def get_coords(header, radius):
 
     # Return the coordinates and the indices used to slice the dataset
     return {"RA":dRAs, "DEC":dDECs, "DEC_slice":(decl, decr), "RA_slice":(ral, rar)}
+
+
+def plot_beam(ax, header, xy=(1,-1)):
+    BMAJ = 3600. * header["BMAJ"] # [arcsec]
+    BMIN = 3600. * header["BMIN"] # [arcsec]
+    BPA =  header["BPA"] # degrees East of North
+    ax.add_artist(Ellipse(xy=xy, width=BMIN, height=BMAJ, angle=BPA, facecolor="0.8", linewidth=0.2))
+
+def get_levels(rms, vmin, vmax, spacing=3):
+    '''
+
+    First contour is at 3 sigma, and then contours go up (or down) in multiples of spacing
+    '''
+
+    levels = []
+    # Add contours from rms to vmin, then reverse
+    # We don't want a 0-level contour
+    val = -(3 * rms)
+    while val > vmin:
+        levels.append(val)
+        # After the first level, go down in increments of spacing
+
+        val -= rms * spacing
+
+    # Reverse in place
+    levels.reverse()
+    val = 3 * rms
+    while val < vmax:
+        levels.append(val)
+        val += rms * spacing
+
+    return levels
