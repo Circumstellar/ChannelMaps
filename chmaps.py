@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import math
-from common import get_coords, plot_beam
+from common import get_coords, plot_beam, get_levels, make_cmap
 
 matplotlib.rc("contour", negative_linestyle="dashed")
 matplotlib.rc("axes", linewidth=0.5)
@@ -12,7 +12,6 @@ matplotlib.rc("ytick.major", size=2)
 from matplotlib.ticker import FormatStrFormatter as FSF
 from matplotlib.ticker import MaxNLocator
 from matplotlib.ticker import MultipleLocator
-from matplotlib.patches import Ellipse
 
 # Read the number of channels
 hdu_list = fits.open("data/AKSco.12CO.display.image.fits")
@@ -34,14 +33,18 @@ header = hdu.header
 
 vs = vels = (np.arange(header["NAXIS3"])*header["CDELT3"] + header["CRVAL3"]) * 1e-3 # [km/s]
 
-# Read the beam size and position angle from the header
-# BMAJ = 3600. * header["BMAJ"] # [arcsec]
-# BMIN = 3600. * header["BMIN"] # [arcsec]
-# BPA =  header["BPA"] # degrees East of North
+# Using the systemic velocity, normalize these to the interval [0, 1], with 0.5 being the middle.
+vsys = 5.49
+v_cent = vs - vsys
+vrange = np.max(np.abs(v_cent))
+vel_min = -vrange
+vel_max = vrange
 
-# If the dataset is 82 channels big, trim 11 from either side to get 60 channels
-triml = 11
-trimr = 11
+print("vrange", vrange)
+
+vel_fracs = (v_cent - vel_min)/(2 * vrange)
+
+print(vel_fracs)
 
 data = hdu.data[0] #,triml:-trimr]
 model_hdu_list = fits.open("data/model.12CO.display.image.fits")
@@ -64,7 +67,7 @@ resid_hdu_list.close()
 # Data is now (nchan, ny, nx)
 # Assuming BSCALE=1.0 and BZERO=0.0
 
-radius = 2/3600.
+radius = 2.1/3600.
 dict = get_coords(header, radius)
 RA = 3600 * dict["RA"]
 DEC = 3600 * dict["DEC"]
@@ -107,23 +110,9 @@ vvmax = np.max(np.abs(all_data))
 norm = matplotlib.colors.Normalize(-vvmax, vvmax)
 
 # Calculate the list of three-sigma contours to feed to the contour routine
-rms   = 3 * 0.00373
-
-levels = []
-# Add contours from rms to vmin, then reverse
-# We don't want a 0-level contour
-val = -rms
-while val > vmin:
-    levels.append(val)
-    val -= rms
-
-# Reverse in place
-levels.reverse()
-val = rms
-while val < vmax:
-    levels.append(val)
-    val += rms
-
+# rms   = 3 * 0.00373
+rms = 0.0045
+levels = get_levels(rms, vmin, vmax)
 print("3 sigma contour levels:", levels)
 
 hdu_list.close()
@@ -177,15 +166,17 @@ def plot(data, panel):
 
             ax = fig.add_axes(rect)
 
+            cmap = make_cmap(vel_fracs[chan])
+
             # Plot image
-            ax.imshow(data[chan], cmap="RdBu", norm=norm, origin="lower", extent=ext)
+            ax.imshow(data[chan], cmap=cmap, norm=norm, origin="lower", extent=ext)
 
             # Plot contours
             ax.contour(data[chan], origin="lower", levels=levels, linewidths=0.2, colors="black", extent=ext)
 
             # Annotate the velocity
             ax.annotate("{:.1f}".format(vs[chan]), (0.1, 0.8), xycoords="axes fraction", size=5)
-            if row == 0 and col == 0:
+            if row == 0 and col == 0 and panel==0:
                 ax.annotate(r"$\textrm{km s}^{-1}$", (0.15, 0.6), xycoords="axes fraction", size=5)
 
             # Set ticks for every arcsec
@@ -206,8 +197,9 @@ def plot(data, panel):
 
             if row == (nrows - 1) and col == 0 and panel==2:
                 # Actually create axis labels
-                ax.set_xlabel(r"$\Delta \alpha$ ['']")
-                ax.set_ylabel(r"$\Delta \delta$ ['']")
+                ax.set_xlabel(r"$\Delta \alpha$ [${}^{\prime\prime}$]", fontsize=8)
+                ax.set_ylabel(r"$\Delta \delta$ [${}^{\prime\prime}$]", fontsize=8)
+
                 ax.tick_params(axis='both', which='major', labelsize=8)
 
             else:
@@ -228,3 +220,4 @@ fig.text(left, 0.24, "residual", rotation="vertical")
 # Add the side labels
 
 fig.savefig("chmaps.pdf")
+fig.savefig("chmaps.svg")
