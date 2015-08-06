@@ -5,12 +5,46 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from matplotlib.colors import LinearSegmentedColormap as LSC
+from scipy.ndimage.interpolation import shift
 
-def get_coords(header, radius):
+c_kms = 2.99792458e5 # [km s^-1]
+
+def read_SMA(fname):
+    hdu_list = fits.open(fname)
+    hdu = hdu_list[0]
+    header = hdu.header
+
+    vs = (np.arange(header["NAXIS3"])*header["CDELT3"] + header["CRVAL3"]) * 1e-3 # [km/s]
+
+    data = hdu.data[0] # Get rid of the zombie first dimension.
+
+    return (vs, data, header)
+
+def read_ALMA(fname):
+    hdu_list = fits.open(fname)
+    hdu = hdu_list[0]
+    header = hdu.header
+
+    # Determine the frequencies.
+    freq = header["CRVAL3"] + np.arange(header["NAXIS3"]) * header["CDELT3"]
+
+    f0 = header["RESTFRQ"] # [Hz]
+
+    # Convert all frequencies to velocity [km/s]
+    vs = c_kms * (f0 - freq)/f0
+
+    data = hdu.data[0] # Get rid of the zombie first dimension.
+
+    return (vs, data, header)
+
+
+def get_coords(data, header, radius, mu_RA=0.0, mu_DEC=0.0):
     '''
     Given a FITS header object, return the RA and DEC vectors.
 
     Alternatively, also specify a truncation radius and this routine will return the slice indices.
+
+    If mu_RA, mu_DEC specified, shift the image by this amount.
     '''
     nx = header["NAXIS1"]
     ny = header["NAXIS2"]
@@ -68,8 +102,32 @@ def get_coords(header, radius):
     dRAs = (np.arange(nx) - nx/2)[decl:decr] * CDELT1
     dDECs = (np.arange(ny) - ny/2)[ral:rar] * CDELT2
 
+    # Based upon the size of the image, convert mu_RA and mu_DEC into integer pixel shifts,
+    # reporting the error in the centroiding (in pixels and arcsec).
+    pix_x = mu_RA / 3600 / CDELT1
+    pix_y = mu_DEC / 3600 / CDELT2
+    print("Pixel shifts: RA: {:.2f}, DEC: {:.2f}".format(pix_x, pix_y))
+
+    # Now, attempt the shifting using scipy
+    data = shift(data, [0, -pix_y, -pix_x]) # 0 is don't shift in wavelength
+
+    # # Truncate these
+    # pix_x = int(pix_x)
+    # pix_y = int(pix_y)
+    #
+    # # Then, add these pixel shifts to decl, decr, ral, and rar.
+    # ral += pix_x
+    # rar += pix_x
+    # decl += pix_y
+    # decr += pix_y
+    #
+    # # So now the dRAs and dDECs are centered around 0.0, but the ral,rar, etc used will
+    # truncate the image such that it is shifted.
+
+    data = data[:, decl:decr, ral:rar]
+
     # Return the coordinates and the indices used to slice the dataset
-    return {"RA":dRAs, "DEC":dDECs, "DEC_slice":(decl, decr), "RA_slice":(ral, rar)}
+    return {"RA":dRAs, "DEC":dDECs, "DEC_slice":(decl, decr), "RA_slice":(ral, rar), "data":data}
 
 
 def plot_beam(ax, header, xy=(1,-1)):

@@ -1,0 +1,36 @@
+# File names
+data: data.fits
+model: model.fits
+resid: resid.fits
+
+telescope: ALMA
+# telescope: SMA
+
+vsys : 0.0 # km/s the central velocity, for purposes of colorbar scale.
+
+# Maximum absolute range in all datasets
+vvmax : 10.0 # [Jy/beam]
+
+# number of corner pixels to use to estimate RMS
+RMS_region: 40
+
+# Measured using chmap_measure
+RMS : 0.1 # [Jy/beam]
+
+# 1/2 sized extent of the image, how much we want to truncate to
+radius : 10. # [arcsec]
+
+# The layout of the maps
+nrows : 10
+ncols : 10
+
+# How many channels to trim from the blue and red sides of the map, if we have too many.
+trim:
+  blue: 0
+  red: 0
+
+# Optionally plot the semi-major and semi-minor axes
+crosshairs:
+  major : 2 # [arcsec]; the length of the semi-major axis
+  incl : 109.5 # [deg]; the inclination of the disk
+  PA : 141.4 # [deg]; position angle of the disk
