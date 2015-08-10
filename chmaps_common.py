@@ -97,11 +97,6 @@ def get_coords(data, header, radius, mu_RA=0.0, mu_DEC=0.0):
     ral = mx-slice_RA
     rar = mx+slice_RA
 
-    # Lay down relative coordinates spanning the image
-    # Note that RAs actually goes in decreasing order because of sky convention
-    dRAs = (np.arange(nx) - nx/2)[decl:decr] * CDELT1
-    dDECs = (np.arange(ny) - ny/2)[ral:rar] * CDELT2
-
     # Based upon the size of the image, convert mu_RA and mu_DEC into integer pixel shifts,
     # reporting the error in the centroiding (in pixels and arcsec).
     pix_x = mu_RA / 3600 / CDELT1
@@ -125,6 +120,11 @@ def get_coords(data, header, radius, mu_RA=0.0, mu_DEC=0.0):
     # truncate the image such that it is shifted.
 
     data = data[:, decl:decr, ral:rar]
+
+    # Lay down relative coordinates spanning the image
+    # Note that RAs actually goes in decreasing order because of sky convention
+    dRAs = (np.arange(nx) - nx/2)[decl:decr] * CDELT1
+    dDECs = (np.arange(ny) - ny/2)[ral:rar] * CDELT2
 
     # Return the coordinates and the indices used to slice the dataset
     return {"RA":dRAs, "DEC":dDECs, "DEC_slice":(decl, decr), "RA_slice":(ral, rar), "data":data}

@@ -100,18 +100,29 @@ mu_DEC = config["mu_DEC"]
 # If the ellipse is specified, read it and plot it
 crosshairs = config.get("crosshairs", None)
 if crosshairs:
-    major = crosshairs["major"]
+    a = crosshairs["major"]
     incl = crosshairs["incl"]
     PA = crosshairs["PA"]
 
-    minor = major * math.cos(incl * np.pi/180.)
+
+    b = a * math.cos(incl * np.pi/180.)
+
     slope = math.tan(PA * np.pi/180.)
+    print("slope", slope)
 
-    x1s = np.linspace(-minor * math.cos(PA * np.pi/180.), minor * math.cos(PA * np.pi/180.))
-    y1s = x1s * slope
+    # Because the crosshairs will be plotted on the channel map, where RA runs positive to the
+    # left, we will use a separate coordinate for RA plotting.
 
-    x2s = np.linspace(-major * math.sin(PA * np.pi/180.), major * math.sin(PA * np.pi/180.))
-    y2s = -x2s / slope
+    # if (PA > 0) and (PA < 90):
+    x_a = np.linspace(-a * math.cos(PA * np.pi/180.), a * math.cos(PA * np.pi/180.))
+
+    RA_a = -x_a
+    DEC_a = x_a * slope
+
+    x_b = np.linspace(-b * math.sin(PA * np.pi/180.), b * math.sin(PA * np.pi/180.))
+    RA_b = -x_b
+    DEC_b = -x_b / slope
+
 
 def plot_maps(fits_name, fname):
     try:
@@ -130,6 +141,8 @@ def plot_maps(fits_name, fname):
     data = dict["data"]
 
     ext = (RA[0], RA[-1], DEC[0], DEC[-1]) # [arcsec]
+
+    print("Extent", ext)
     # data = data[:, decl:decr, ral:rar]
 
     # Using the systemic velocity, normalize  these to the interval [0, 1], with 0.5 being the middle corresponding to the systemic velocity. Note that in this case, it is not likely that v_min = 0.0 && v_max = 1.0. Either v_min or v_max will be greater than 0.0 or less than 1.0, respectively, unless the systemic velocity is perfectly centered.
@@ -172,8 +185,8 @@ def plot_maps(fits_name, fname):
             ax.contour(data[chan], origin="lower", levels=levels, linewidths=0.2, colors="black", extent=ext)
 
             if crosshairs:
-                ax.plot(x1s, y1s, lw=0.1, ls=":", color="0.5")
-                ax.plot(x2s, y2s, lw=0.1, ls=":", color="0.5")
+                ax.plot(RA_a, DEC_a, lw=0.2, ls=":", color="0.2")
+                ax.plot(RA_b, DEC_b, lw=0.2, ls="-", color="0.2")
 
             # Annotate the velocity
             text = ax.annotate("{:.1f}".format(vs[chan]), (0.1, 0.8), xycoords="axes fraction", size=5, color=cmap(vel_fracs[chan]))

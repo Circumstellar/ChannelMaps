@@ -34,3 +34,7 @@ crosshairs:
   major : 2 # [arcsec]; the length of the semi-major axis
   incl : 109.5 # [deg]; the inclination of the disk
   PA : 141.4 # [deg]; position angle of the disk
+
+# Corresponding to output from JudithExcalibur
+mu_RA : 0.0 # [arcsec]
+mu_DEC : 0.0 # [arcsec]
