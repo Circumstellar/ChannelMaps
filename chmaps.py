@@ -215,7 +215,49 @@ def plot_maps(fits_name, fname):
 
     fig.savefig(fname)
 
+def plot_spectrum(fits_name, fname):
+    '''
+    Sum up all of the flux in each image to make a spatially-integrated line spectrum.
+    '''
+    try:
+        vs, data, header = readfn(fits_name)
+    except FileNotFoundError as e:
+        print("Cannot load {}, continuing.".format(fits_name))
+        return
+
+    nchan = data.shape[0]
+
+    dict = common.get_coords(data, header, radius, mu_RA, mu_DEC)
+    RA = 3600 * dict["RA"] # [arcsec]
+    DEC = 3600 * dict["DEC"] # [arcsec]
+    decl, decr = dict["DEC_slice"]
+    ral, rar = dict["RA_slice"]
+    data = dict["data"]
+
+    # Need to divide by how many pixels are in a beam, so that we get Jy/pixel
+
+
+    vsys = config["vsys"]
+    v_cent = vs - vsys
+
+    print(data.shape)
+
+    flux = np.sum(data, axis=(1,2))
+
+    fig, ax = plt.subplots(nrows=1)
+    ax.plot(v_cent, flux, ls="steps-mid")
+    ax.set_xlabel(r"$v$ [km/s]")
+    ax.set_ylabel("Flux [Jy]")
+
+
+    fig.savefig(fname)
+
+
 # Go through and plot data, model, and residuals. If the file doesn't exist, the routine will skip.
 plot_maps(config["data"], "data.pdf")
 plot_maps(config["model"], "model.pdf")
 plot_maps(config["resid"], "resid.pdf")
+
+plot_spectrum(config["data"], "spec_data.pdf")
+plot_spectrum(config["model"], "spec_model.pdf")
+plot_spectrum(config["resid"], "spec_resid.pdf")
