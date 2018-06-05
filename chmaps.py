@@ -7,6 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Plot channel maps.")
 parser.add_argument("--config", default="config.yaml", help="The configuration file specifying defaults.")
 parser.add_argument("--measure", action="store_true", help="Just measure the basic properties, like the RMS and number of channels, so that you may add them into the config.yaml file.")
+parser.add_argument("--fmt", default="pdf", help="What file format to save the maps in.")
 args = parser.parse_args()
 
 import yaml
@@ -39,6 +40,17 @@ if args.measure:
     # Use the dataset to actually measure quantities like the maximum intensity and RMS
     # so that they can be replicated for the other types of measurements and put on the same scale.
     vs, data, header = readfn(config["data"])
+
+    # Now, think about truncating the channels
+    low = config["trim"]["blue"]
+    high = config["trim"]["red"]
+
+    if high != 0:
+        vs = vs[low:-high]
+        data = data[low:-high]
+    else:
+        vs = vs[low:]
+        data = data[low:]
 
     print("Data shape", data.shape)
 
@@ -131,6 +143,22 @@ def plot_maps(fits_name, fname):
         print("Cannot load {}, continuing.".format(fits_name))
         return
 
+    if vs[-1] < vs[0]:
+        print("Reversing velocity to be increasing.")
+        vs = vs[::-1]
+        data = data[::-1]
+
+    # Now, think about truncating the channels
+    low = config["trim"]["blue"]
+    high = config["trim"]["red"]
+
+    if high != 0:
+        vs = vs[low:-high]
+        data = data[low:-high]
+    else:
+        vs = vs[low:]
+        data = data[low:]
+
     nchan = data.shape[0]
 
     dict = common.get_coords(data, header, radius, mu_RA, mu_DEC)
@@ -205,6 +233,11 @@ def plot_maps(fits_name, fname):
                 ax.set_ylabel(r"$\Delta \delta$ [${}^{\prime\prime}$]", fontsize=8)
 
                 ax.tick_params(axis='both', which='major', labelsize=8)
+                #
+                # ax.xaxis.set_major_formatter(FSF("%.0f"))
+                # ax.yaxis.set_major_formatter(FSF("%.0f"))
+                # ax.xaxis.set_major_locator(MultipleLocator(1.))
+                # ax.yaxis.set_major_locator(MultipleLocator(1.))
 
             else:
                 # Hide axis label and tick labels
@@ -224,6 +257,14 @@ def plot_spectrum(fits_name, fname):
     except FileNotFoundError as e:
         print("Cannot load {}, continuing.".format(fits_name))
         return
+
+    # We always want to display the data from blueshifted to redshifted. This means we want to
+    # find out if the velocities are decreasing, and if so, switch them to increasing
+
+    if vs[-1] < vs[0]:
+        print("Reversing velocity to be increasing.")
+        vs = vs[::-1]
+        data = data[::-1]
 
     nchan = data.shape[0]
 
@@ -253,11 +294,12 @@ def plot_spectrum(fits_name, fname):
     fig.savefig(fname)
 
 
-# Go through and plot data, model, and residuals. If the file doesn't exist, the routine will skip.
-plot_maps(config["data"], "data.pdf")
-plot_maps(config["model"], "model.pdf")
-plot_maps(config["resid"], "resid.pdf")
 
-plot_spectrum(config["data"], "spec_data.pdf")
-plot_spectrum(config["model"], "spec_model.pdf")
-plot_spectrum(config["resid"], "spec_resid.pdf")
+# Go through and plot data, model, and residuals. If the file doesn't exist, the routine will skip.
+plot_maps(config["data"], "data." + args.fmt)
+plot_maps(config["model"], "model." + args.fmt)
+plot_maps(config["resid"], "resid." + args.fmt)
+
+# plot_spectrum(config["data"], "spec_data.pdf")
+# plot_spectrum(config["model"], "spec_model.pdf")
+# plot_spectrum(config["resid"], "spec_resid.pdf")

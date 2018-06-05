@@ -21,9 +21,17 @@ def read_SMA(fname):
     return (vs, data, header)
 
 def read_ALMA(fname):
+    "Return the beam parameters as well. Check the CASAMBM too."
     hdu_list = fits.open(fname)
+
     hdu = hdu_list[0]
     header = hdu.header
+
+    # Check to see if there is CASAMBM keyword, and if it's true
+    # If so, load the second header, which contains the beam info
+    # Then, use the median beam, as determined by the major axis
+    CASAMBM = header.get("CASAMBM", False)
+
 
     # Determine the frequencies.
     freq = header["CRVAL3"] + np.arange(header["NAXIS3"]) * header["CDELT3"]
@@ -35,7 +43,22 @@ def read_ALMA(fname):
 
     data = hdu.data[0] # Get rid of the zombie first dimension.
 
-    return (vs, data, header)
+
+    if CASAMBM:
+        # Get the beam info from the record array
+        data2 = hdu_list[1].data
+        BMAJ = np.median(data2["BMAJ"])
+        BMIN = np.median(data2["BMIN"])
+        BPA = np.median(data2["BPA"])
+    else:
+        # Get the beam info from the header, like normal
+        BMAJ = 3600 * header["BMAJ"]
+        BMIN = 3600 * header["BMIN"]
+        BPA = header["BPA"]
+
+    beam = (BMAJ, BMIN, BPA)
+
+    return (vs, data, header, beam)
 
 
 def get_coords(data, header, radius, mu_RA=0.0, mu_DEC=0.0):
@@ -129,17 +152,20 @@ def get_coords(data, header, radius, mu_RA=0.0, mu_DEC=0.0):
     # Return the coordinates and the indices used to slice the dataset
     return {"RA":dRAs, "DEC":dDECs, "DEC_slice":(decl, decr), "RA_slice":(ral, rar), "data":data}
 
+def plot_beam(ax, beam, xy=(1,-1), facecolor="0.5", edgecolor="0.5"):
+    BMAJ, BMIN, BPA = beam
+    # BMAJ = 3600. * BMAJ # [arcsec]
+    # BMIN = 3600. * BMIN # [arcsec]
 
-def plot_beam(ax, header, xy=(1,-1)):
-    BMAJ = 3600. * header["BMAJ"] # [arcsec]
-    BMIN = 3600. * header["BMIN"] # [arcsec]
-    BPA =  header["BPA"] # degrees East of North
+    # BMAJ = 3600. * header["BMAJ"] # [arcsec]
+    # BMIN = 3600. * header["BMIN"] # [arcsec]
+    # BPA =  header["BPA"] # degrees East of North
     print('BMAJ: {:.3f}", BMIN: {:.3f}", BPA: {:.2f} deg'.format(BMAJ, BMIN, BPA))
     # However, to plot it we need to negate the BPA since the rotation is the opposite direction
     # due to flipping RA.
-    ax.add_artist(Ellipse(xy=xy, width=BMIN, height=BMAJ, angle=-BPA, facecolor="0.8", linewidth=0.2))
+    ax.add_artist(Ellipse(xy=xy, width=BMIN, height=BMAJ, angle=-BPA, facecolor=facecolor, linewidth=0.2, edgecolor=edgecolor))
 
-def get_levels(rms, vmin, vmax, spacing=3):
+def get_levels(rms, vmin, vmax, spacing=3, starting=3):
     '''
     First contour is at 3 sigma, and then contours go up (or down) in multiples of spacing
     '''
@@ -147,7 +173,7 @@ def get_levels(rms, vmin, vmax, spacing=3):
     levels = []
     # Add contours from rms to vmin, then reverse
     # We don't want a 0-level contour
-    val = -(3 * rms)
+    val = -(starting * rms)
     while val > vmin:
         levels.append(val)
         # After the first level, go down in increments of spacing
@@ -156,7 +182,7 @@ def get_levels(rms, vmin, vmax, spacing=3):
 
     # Reverse in place
     levels.reverse()
-    val = 3 * rms
+    val = starting * rms
     while val < vmax:
         levels.append(val)
         val += rms * spacing
